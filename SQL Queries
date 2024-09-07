@@ -1,0 +1,247 @@
+#Here you can see all the SQL queries I wrote in this project. 
+
+1. Represent the “book_date” column in “yyyy-mmm-dd” format using the Bookings table 
+Expected output: book_ref, book_date (in “yyyy-mmm-dd” format) , total amount 
+
+Answer:	
+SELECT book_ref, 
+to_char(book_date, ‘yyyy-mon-dd’) as book_date,
+total_amount
+FROM BOOKINGS
+
+2. Get the following columns in the exact same sequence.
+Expected columns in the output: ticket_no, boarding_no, seat_number, passenger_id, passenger_name.
+
+Answer: 
+SELECT b.ticket_no, b.boarding_no, b.seat_no as seat_number, t.passenger_id, t.passenger_name
+FROM BOARDING_PASSES b 
+JOIN TICKETS t 
+ON b.ticket_no = t.ticket_no
+
+3. Write a query to find the seat number which is least allocated among all the seats.
+
+Answer: 	
+WITH seat_count as ( 
+SELECT seat_no, COUNT(seat_no) as total_count 
+FROM BOARDING_PASSES 
+GROUP BY seat_no),
+seat_rank_num as (
+SELECT *, DENSE_RANK() OVER(order by total_count ASC) as seat_rank 
+FROM seat_count)
+SELECT seat_no FROM seat_rank_num WHERE seat_rank = 1
+
+4. In the database, identify the month-wise highest paying passenger name and passenger id.
+Expected output: Month_name(“mmm-yy” format), passenger_id, passenger_name and total amount
+
+Answer:	
+WITH total_amount_month as (
+SELECT to_char(b.book_date, ‘MON-yy’) as Month_name, t.passenger_id, t.passenger_name, SUM(b.total_amount) as total_amount
+FROM BOOKINGS b 
+JOIN TICKETS t 
+ON b.book_ref = t.book_ref 
+GROUP BY 1,2,3),
+rank_total_amount as (
+SELECT *, DENSE_RANK() OVER(partition by Month_name order by total_amount DESC) as rank_amount 
+FROM total_amount_month 
+ORDER BY 1)
+SELECT Month_name, passenger_id, passenger_name, total_amount
+FROM rank_total_amount
+WHERE rank_amount = 1
+
+5.	In the database, identify the month-wise least paying passenger name and passenger id.
+Expected output: Month_name(“mmm-yy” format), passenger_id, passenger_name and total amount
+
+Answer:	
+WITH total_amount_month as (
+SELECT to_char(b.book_date, ‘MON-yy’) as Month_name, t.passenger_id, t.passenger_name, SUM(b.total_amount) as total_amount
+FROM BOOKINGS b 
+JOIN TICKETS t 
+ON b.book_ref = t.book_ref 
+GROUP BY 1,2,3),
+rank_total_amount as (
+SELECT *, DENSE_RANK() OVER(partition by Month_name order by total_amount ASC) as rank_amount 
+FROM total_amount_month 	
+ORDER BY 1)
+SELECT Month_name, passenger_id, passenger_name, total_amount
+FROM rank_total_amount
+WHERE rank_amount = 1
+
+6. Identify the travel details of non-stop journeys  or return journeys (having more than 1 flight).
+Expected Output: Passenger_id, passenger_name, ticket_number and flight count.
+
+Answer: 	
+SELECT t.passenger_id, t.passenger_name, bp.ticket_no, count(bp.flight_id) as flight_count
+FROM TICKETS t
+JOIN BOARDING_PASSES bp 
+ON t.ticket_no = bp.ticket_no
+GROUP BY 1,2,3
+HAVING count(bp.flight_id) > 1
+ORDER BY 4 ASC
+
+7. How many tickets are there without boarding passes?
+Expected Output: just one number is required.
+
+Answer:	
+SELECT count(*) as total_tickets_without_boarding_pass
+FROM TICKETS t 
+LEFT JOIN BOARDING_PASSES bp
+ON t.ticket_no = bp.ticket_no 
+WHERE bp.ticket_no IS NULL
+
+8. Identify details of the longest flight (using the flights table).
+Expected Output: Flight number, departure airport, arrival airport, aircraft code, and durations.
+
+Answer:	
+WITH total_duration as (
+SELECT flight_no, departure_airport, arrival_airport, aircraft_code, (scheduled_arrival – scheduled_departure) as durations 
+FROM FLIGHTS 
+GROUP BY 1,2,3,4,5),
+duration_rank_table as (
+SELECT *, DENSE_RANK() OVER(order by durations desc)  as duration_rank FROM total_duration)
+SELECT flight_no, departure_airport, arrival_airport, aircraft_code, durations 
+FROM duration_rank_table 
+WHERE duration_rank = 1
+
+9. Identify details of all the morning flights (morning means between 6AM to 11 AM, using flights table)?
+Expected output: flight_id, flight_number, scheduled_departure, scheduled_arrival and timings.
+
+Answer:	
+WITH time_table as (
+SELECT flight_id, flight_no, scheduled_departure, scheduled_arrival, to_char(scheduled_departure, ‘hh24:mi:ss’) as timings 
+FROM FLIGHTS)
+SELECT * 
+FROM time_table
+WHERE timings BETWEEN ’06:00:00’ AND ’11:00:00’ 
+ORDER BY 5 DESC
+
+10. Identify the earliest morning flight available from every airport.
+Expected output: flight_id, flight_number, scheduled_departure, scheduled_arrival, departure airport and timings.
+
+Answer:	
+WITH time_table as (
+SELECT flight_id, flight_no, scheduled_departure, scheduled_arrival, departure_airport, to_char(scheduled_departure, ‘hh24:mi:ss’) as timings FROM FLIGHTS),
+early_flight_airport as (
+SELECT departure_airport, MIN(timings) as earliest_flight_time 
+FROM time_table 
+WHERE timings BETWEEN ’06:00:00’ AND ’11:00:00’ 
+GROUP BY 1)
+SELECT t.flight_id, t.flight_no, t.scheduled_departure, t.scheduled_arrival, t.departure_airport, t.timings 
+FROM time_table t 
+JOIN early_flight_airport e 
+ON t.departure_airport = e.departure_airport 
+AND t.timings = e.earliest_flight_time
+ORDER BY t.departure_airport ASC
+
+11. Questions: Find a list of airport codes in Europe/Moscow timezone
+ Expected Output:  Airport_code. 
+
+Answer:	
+SELECT airport_code
+FROM AIRPORTS
+WHERE timezone = ‘Europe/Moscow’
+
+12.	Write a query to get the count of seats in various fare conditions for every aircraft code.
+ Expected Outputs: Aircraft_code, fare_conditions ,seat count
+
+Answer:	
+SELECT aircraft_code, fare_conditions, COUNT(seat_no) as seat_count
+FROM SEATS
+GROUP BY 1,2
+ORDER BY 1 ASC, 2 ASC
+
+13. How many aircraft codes have at least one Business class seat?
+Expected Output: Count of aircraft codes
+
+Answer:	
+SELECT COUNT(DISTINCT aircraft_code) as aircraft_code_count
+FROM SEATS
+WHERE fare_conditions = ‘Business’
+
+14.	Find out the name of the airport having a maximum number of departure flights.
+ Expected Output: Airport_name. 
+
+Answer:	
+WITH flight_count as ( 
+SELECT a.airport_name, f.departure_airport, COUNT(f.flight_id) as total_flight_count
+FROM AIRPORTS a 
+JOIN FLIGHTS f
+ON a.airport_code = f.departure_airport
+GROUP BY 1,2),
+flight_rank_num as ( 
+SELECT *, DENSE_RANK() over(order by total_flight_count DESC) as flight_rank
+FROM flight_count)
+SELECT airport_name
+FROM flight_rank_num
+WHERE flight_rank = 1
+
+15.	Find out the name of the airport having the least number of scheduled departures flights
+ Expected Output: Airport_name. 
+
+Answer:	
+WITH flight_count as ( 
+SELECT a.airport_name, f.departure_airport, COUNT(f.flight_id) as total_flight_count
+FROM AIRPORTS a 
+JOIN FLIGHTS f
+ON a.airport_code = f.departure_airport
+GROUP BY 1,2),
+flight_rank_num as ( 
+SELECT *, DENSE_RANK() over(order by total_flight_count ASC) as flight_rank
+FROM flight_count)
+SELECT airport_name
+FROM flight_rank_num
+WHERE flight_rank = 1
+
+16. How many flights from the ‘DME’ airport don’t have actual departure?
+ Expected Output: Flight Count 
+
+Answer:	
+SELECT COUNT(DISTINCT flight_no)
+FROM FLIGHTS
+WHERE departure_airport = ‘DME’ AND actual_departure IS NULL
+
+17. Identify flight IDs having a range between 3000 to 6000.
+ Expected Output: Flight_Number, aircraft_code, ranges. 
+
+Answer:	
+SELECT f.flight_no, a.aircraft_code, a.range
+FROM aircrafts a 	
+JOIN FLIGHTS f 
+ON a.aircraft_code = f.aircraft_code
+WHERE a.range BETWEEN 3000 AND 6000
+GROUP BY 1,2,3
+
+18.	Write a query to get the count of flights flying between URS and KUF.
+ Expected Output: Flight_count
+
+Answer:	
+SELECT COUNT(DISTINCT flight_id) as Flight_count
+FROM FLIGHTS
+WHERE departure_airport IN (‘URS’,’KUF’) AND arrival_airport IN (‘KUF’,’URS’)
+
+19.	Write a query to get the count of flights flying from either NOZ or KRR?
+ Expected Output: Flight count 
+
+Answer:	
+SELECT COUNT(DISTINCT flight_id) as Flight_count
+FROM FLIGHTS
+WHERE departure_airport IN (‘NOZ’,’KRR’)
+
+20.	Write a query to get the count of flights flying from KZN, DME, NBC, NJC, GDX, SGC, VKO, ROV
+Expected Output: Departure airport, count of flights flying from these   airports.
+
+Answer:	
+SELECT departure_airport, COUNT(flight_id) as Flight_count
+FROM FLIGHTS
+WHERE departure_airport IN (‘KZN’,’DME’,’NBC’,’NJC’,’GDX’,’SGC’,’VKO’,’ROV’)
+GROUP BY 1
+
+
+
+
+
+
+
+
+
+
+
